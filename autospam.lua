@@ -1,42 +1,68 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TeleportService = game:GetService("TeleportService")
-local VirtualUser = game:GetService("VirtualUser")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 
--- Clean up existing UIs
-local existingToggle = playerGui:FindFirstChild("VVS_ToggleGui")
+-- Safe Container Resolution (Prevents instant CoreGui / PlayerGui detection flags)
+local function getSafeContainer()
+	if gethui then
+		return gethui()
+	elseif syn and syn.protect_gui then
+		local folder = Instance.new("Folder")
+		syn.protect_gui(folder)
+		folder.Parent = game:GetService("CoreGui")
+		return folder
+	else
+		return playerGui
+	end
+end
+
+local targetContainer = getSafeContainer()
+
+-- Clean up existing UIs safely
+local existingToggle = targetContainer:FindFirstChild("VVS_ToggleGui")
 if existingToggle then existingToggle:Destroy() end
-local existingMain = playerGui:FindFirstChild("VVS_MainGui")
+local existingMain = targetContainer:FindFirstChild("VVS_MainGui")
 if existingMain then existingMain:Destroy() end
 
--- Sleek Modern Color Palette
+-- Color Palette
 local COLOR_BG = Color3.fromRGB(15, 12, 14)
 local COLOR_CARD = Color3.fromRGB(24, 18, 22)
 local COLOR_CARD_HOVER = Color3.fromRGB(32, 24, 29)
 local COLOR_BORDER = Color3.fromRGB(80, 20, 30)
 local COLOR_ACCENT = Color3.fromRGB(220, 38, 38)
-local COLOR_ACCENT_DARK = Color3.fromRGB(150, 20, 20)
 local COLOR_TEXT = Color3.fromRGB(245, 240, 242)
 local COLOR_SUBTEXT = Color3.fromRGB(155, 140, 145)
 local COLOR_GREEN = Color3.fromRGB(34, 197, 94)
 
 local autospamActive = false
 local currentCPS = 1
-local currentInterval = 0 -- 0 interval for max speed / true millisecond clicking
+local currentInterval = 0.05 -- Adjusted default interval to prevent instant packet floods
 local boundKeyCode = nil
 local isKeybindListening = false
 local safetyModActive = false
+
+-- Dynamic Lazy Loading of VirtualUser to prevent startup scanning
+local VirtualUser = nil
+local function getVirtualUser()
+	if not VirtualUser then
+		local success, service = pcall(function()
+			return game:GetService("VirtualUser")
+		end)
+		if success then VirtualUser = service end
+	end
+	return VirtualUser
+end
 
 -- Root ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "VVS_MainGui"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = playerGui
+screenGui.Parent = targetContainer
 
 -- Styling Helpers
 local function applyCorner(inst, radius)
@@ -90,7 +116,7 @@ end
 local toggleGui = Instance.new("ScreenGui")
 toggleGui.Name = "VVS_ToggleGui"
 toggleGui.ResetOnSpawn = false
-toggleGui.Parent = playerGui
+toggleGui.Parent = targetContainer
 
 local openButton = Instance.new("TextButton")
 openButton.Name = "OpenTestButton"
@@ -389,13 +415,13 @@ toggleSwitchBtn.Parent = sec1
 applyCorner(toggleSwitchBtn, 14)
 local toggleStroke = applyStroke(toggleSwitchBtn, COLOR_BORDER, 1)
 
--- Section 2: Clicks per burst (UNLIMITED)
+-- Section 2: Clicks per burst
 local sec2 = createSection(70, 2)
 local clicksLabel = Instance.new("TextLabel")
 clicksLabel.Size = UDim2.new(1, -24, 0, 22)
 clicksLabel.Position = UDim2.new(0, 12, 0, 8)
 clicksLabel.BackgroundTransparency = 1
-clicksLabel.Text = "Clicks Per Burst (No Limit):"
+clicksLabel.Text = "Clicks Per Burst:"
 clicksLabel.TextColor3 = COLOR_TEXT
 clicksLabel.Font = Enum.Font.Gotham
 clicksLabel.TextSize = 12
@@ -414,13 +440,13 @@ clicksInput.Parent = sec2
 applyCorner(clicksInput, 6)
 applyStroke(clicksInput, COLOR_BORDER, 1)
 
--- Section 3: Interval Speed (UNLIMITED)
+-- Section 3: Interval Speed
 local sec3 = createSection(70, 3)
 local intervalLabel = Instance.new("TextLabel")
 intervalLabel.Size = UDim2.new(1, -24, 0, 22)
 intervalLabel.Position = UDim2.new(0, 12, 0, 8)
 intervalLabel.BackgroundTransparency = 1
-intervalLabel.Text = "Interval Speed (0 = Ultra/Millisecond):"
+intervalLabel.Text = "Interval Speed (Seconds):"
 intervalLabel.TextColor3 = COLOR_TEXT
 intervalLabel.Font = Enum.Font.Gotham
 intervalLabel.TextSize = 12
@@ -431,7 +457,7 @@ local intervalInput = Instance.new("TextBox")
 intervalInput.Size = UDim2.new(1, -24, 0, 28)
 intervalInput.Position = UDim2.new(0, 12, 0, 32)
 intervalInput.BackgroundColor3 = COLOR_BG
-intervalInput.Text = "0"
+intervalInput.Text = "0.05"
 intervalInput.TextColor3 = COLOR_TEXT
 intervalInput.Font = Enum.Font.GothamBold
 intervalInput.TextSize = 12
@@ -551,7 +577,7 @@ executeKeyBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Unlimited Input Validation
+-- Input Validation
 clicksInput.FocusLost:Connect(function()
 	local num = tonumber(clicksInput.Text)
 	currentCPS = (num and num > 0) and math.floor(num) or 1
@@ -560,7 +586,7 @@ end)
 
 intervalInput.FocusLost:Connect(function()
 	local num = tonumber(intervalInput.Text)
-	currentInterval = (num and num >= 0) and num or 0
+	currentInterval = (num and num >= 0) and num or 0.05
 	intervalInput.Text = tostring(currentInterval)
 end)
 
@@ -583,7 +609,6 @@ toggleSwitchBtn.MouseButton1Click:Connect(function()
 	setAutospam(not autospamActive)
 end)
 
--- Cancel Keybind when clicking outside or pressing key
 keybindBtn.MouseButton1Click:Connect(function()
 	isKeybindListening = true
 	keybindBtn.Text = "PRESS KEY..."
@@ -611,7 +636,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
--- Helper Function: Check if the mouse cursor is over any part of the UI
+-- Safe UI Hover Checker
 local function isMouseOverGui()
 	local mousePos = UserInputService:GetMouseLocation()
 	local guiObjects = playerGui:GetGuiObjectsAtPosition(mousePos.X, mousePos.Y)
@@ -623,9 +648,8 @@ local function isMouseOverGui()
 	return false
 end
 
--- Ultra High-Speed Autospam Loop with UI Mouse Protection
+-- Optimized Loop with Delay Protection
 task.spawn(function()
-	local lastTime = tick()
 	while screenGui and screenGui.Parent do
 		if currentInterval <= 0 then
 			RunService.RenderStepped:Wait()
@@ -637,18 +661,20 @@ task.spawn(function()
 			local mouseOverUI = isMouseOverGui()
 			local shouldClick = (boundKeyCode == nil) or UserInputService:IsKeyDown(boundKeyCode)
 			
-			-- Only trigger auto-click if user is NOT hovering over any Hub UI elements
 			if shouldClick and not mouseOverUI then
-				VirtualUser:CaptureController()
-				for i = 1, currentCPS do
-					VirtualUser:ClickButton1(Vector2.new(100, 100))
+				local vu = getVirtualUser()
+				if vu then
+					vu:CaptureController()
+					for i = 1, currentCPS do
+						vu:ClickButton1(Vector2.new(100, 100))
+					end
 				end
 			end
 		end
 	end
 end)
 
--- Safety Mod Detection
+-- Slowed-Down Safety Mod Check Loop to Avoid CPU/Thread Flags
 local function checkPlayerSafety(plr)
 	if not safetyModActive then return end
 	local nameLower = plr.Name:lower()
@@ -675,7 +701,10 @@ safetyToggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-Players.PlayerAdded:Connect(checkPlayerSafety)
+-- Delayed event registration
+task.delay(1, function()
+	Players.PlayerAdded:Connect(checkPlayerSafety)
+end)
 
 rejoinBtn.MouseButton1Click:Connect(function()
 	if #Players:GetPlayers() <= 1 then
