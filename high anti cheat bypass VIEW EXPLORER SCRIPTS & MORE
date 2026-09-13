@@ -1,0 +1,875 @@
+--[[\n    VVS Explorer & Property Hub - Ultra-Stealth Optimized\n    Anti-Cheat Hardened Environment\n]]--
+
+-- 1. Anti-Cheat & Environment Hardening (Must run prior to any core service usage)
+local cloneref = cloneref or function(o) return o end
+local getgenv = getgenv or function() return _G end
+
+local CoreGui = cloneref(game:GetService("CoreGui"))
+local Players = cloneref(game:GetService("Players"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local TweenService = cloneref(game:GetService("TweenService"))
+local RunService = cloneref(game:GetService("RunService"))
+
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+-- Safe Container Resolution (Protected root to conceal from instance scanners)
+local function getSafeContainer()
+	local success, container = pcall(function()
+		if gethui then
+			return gethui()
+		elseif syn and syn.protect_gui then
+			local folder = Instance.new("Folder")
+			syn.protect_gui(folder)
+			folder.Parent = CoreGui
+			return folder
+		else
+			return playerGui
+		end
+	end)
+	if success and container then return container end
+	return playerGui
+end
+
+local targetContainer = getSafeContainer()
+
+-- Clean up existing UIs safely
+local function wipeOldUIs()
+	for _, child in ipairs(targetContainer:GetChildren()) do
+		if child.Name == "VVS_ToggleGui" or child.Name == "VVS_MainGui" or child.Name:find("VVS_") then
+			pcall(function() child:Destroy() end)
+		end
+	end
+	if targetContainer ~= playerGui then
+		for _, child in ipairs(playerGui:GetChildren()) do
+			if child.Name == "VVS_ToggleGui" or child.Name == "VVS_MainGui" or child.Name:find("VVS_") then
+				pcall(function() child:Destroy() end)
+			end
+		end
+	end
+end
+wipeOldUIs()
+
+-- Color Palette
+local COLOR_BG = Color3.fromRGB(15, 12, 14)
+local COLOR_CARD = Color3.fromRGB(24, 18, 22)
+local COLOR_CARD_HOVER = Color3.fromRGB(32, 24, 29)
+local COLOR_BORDER = Color3.fromRGB(80, 20, 30)
+local COLOR_ACCENT = Color3.fromRGB(220, 38, 38)
+local COLOR_TEXT = Color3.fromRGB(245, 240, 242)
+local COLOR_SUBTEXT = Color3.fromRGB(155, 140, 145)
+local COLOR_GREEN = Color3.fromRGB(34, 197, 94)
+
+-- Root ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "VVS_MainGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = targetContainer
+
+-- Styling Helpers
+local function applyCorner(inst, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 8)
+	c.Parent = inst
+end
+
+local function applyStroke(inst, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color or COLOR_BORDER
+	s.Thickness = thickness or 1
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = inst
+	return s
+end
+
+local function tweenColor(inst, property, targetColor, duration)
+	TweenService:Create(inst, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		[property] = targetColor
+	}):Play()
+end
+
+local function makeDraggable(frame, handle)
+	handle = handle or frame
+	local dragging, dragInput, dragStart, startPos
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end)
+	handle.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- Open/Toggle Button Container
+local toggleGui = Instance.new("ScreenGui")
+toggleGui.Name = "VVS_ToggleGui"
+toggleGui.ResetOnSpawn = false
+toggleGui.Parent = targetContainer
+
+local openButton = Instance.new("TextButton")
+openButton.Name = "OpenTestButton"
+openButton.Size = UDim2.new(0, 110, 0, 38)
+openButton.Position = UDim2.new(0, 20, 0.5, -19)
+openButton.BackgroundColor3 = COLOR_CARD
+openButton.Text = "⚡ VVS HUB"
+openButton.TextColor3 = COLOR_TEXT
+openButton.Font = Enum.Font.GothamBold
+openButton.TextSize = 13
+openButton.ZIndex = 10
+openButton.Parent = toggleGui
+applyCorner(openButton, 8)
+local openStroke = applyStroke(openButton, COLOR_BORDER, 1.5)
+
+openButton.MouseEnter:Connect(function()
+	tweenColor(openButton, "BackgroundColor3", COLOR_CARD_HOVER, 0.15)
+	tweenColor(openStroke, "Color", COLOR_ACCENT, 0.15)
+end)
+openButton.MouseLeave:Connect(function()
+	tweenColor(openButton, "BackgroundColor3", COLOR_CARD, 0.15)
+	tweenColor(openStroke, "Color", COLOR_BORDER, 0.15)
+end)
+
+-- Key System Window
+local keyFrame = Instance.new("Frame")
+keyFrame.Name = "KeySystemFrame"
+keyFrame.Size = UDim2.new(0, 380, 0, 350)
+keyFrame.Position = UDim2.new(0.5, -190, 0.5, -175)
+keyFrame.BackgroundColor3 = COLOR_BG
+keyFrame.Visible = false
+keyFrame.ZIndex = 5
+keyFrame.Parent = screenGui
+applyCorner(keyFrame, 10)
+applyStroke(keyFrame, COLOR_BORDER, 1.5)
+makeDraggable(keyFrame)
+
+local keyHeader = Instance.new("Frame")
+keyHeader.Size = UDim2.new(1, 0, 0, 45)
+keyHeader.BackgroundColor3 = COLOR_CARD
+keyHeader.ZIndex = 5
+keyHeader.Parent = keyFrame
+applyCorner(keyHeader, 10)
+
+local keyTitle = Instance.new("TextLabel")
+keyTitle.Size = UDim2.new(1, -20, 1, 0)
+keyTitle.Position = UDim2.new(0, 15, 0, 0)
+keyTitle.BackgroundTransparency = 1
+keyTitle.Text = "🔑 VVS KEY SYSTEM"
+keyTitle.TextColor3 = COLOR_TEXT
+keyTitle.Font = Enum.Font.GothamBold
+keyTitle.TextSize = 14
+keyTitle.TextXAlignment = Enum.TextXAlignment.Left
+keyTitle.ZIndex = 5
+keyTitle.Parent = keyHeader
+
+local tabHolder = Instance.new("Frame")
+tabHolder.Size = UDim2.new(1, -24, 0, 32)
+tabHolder.Position = UDim2.new(0, 12, 0, 55)
+tabHolder.BackgroundTransparency = 1
+tabHolder.ZIndex = 5
+tabHolder.Parent = keyFrame
+
+local mainTabBtn = Instance.new("TextButton")
+mainTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+mainTabBtn.BackgroundColor3 = COLOR_ACCENT
+mainTabBtn.Text = "MAIN"
+mainTabBtn.TextColor3 = COLOR_TEXT
+mainTabBtn.Font = Enum.Font.GothamBold
+mainTabBtn.TextSize = 12
+mainTabBtn.ZIndex = 5
+mainTabBtn.Parent = tabHolder
+applyCorner(mainTabBtn, 6)
+
+local creditsTabBtn = Instance.new("TextButton")
+creditsTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+creditsTabBtn.Position = UDim2.new(0.52, 0, 0, 0)
+creditsTabBtn.BackgroundColor3 = COLOR_CARD
+creditsTabBtn.Text = "CREDITS"
+creditsTabBtn.TextColor3 = COLOR_SUBTEXT
+creditsTabBtn.Font = Enum.Font.GothamBold
+creditsTabBtn.TextSize = 12
+creditsTabBtn.ZIndex = 5
+creditsTabBtn.Parent = tabHolder
+applyCorner(creditsTabBtn, 6)
+
+local mainTabContent = Instance.new("Frame")
+mainTabContent.Size = UDim2.new(1, -24, 0, 240)
+mainTabContent.Position = UDim2.new(0, 12, 0, 95)
+mainTabContent.BackgroundTransparency = 1
+mainTabContent.ZIndex = 5
+mainTabContent.Parent = keyFrame
+
+local creditsTabContent = Instance.new("Frame")
+creditsTabContent.Size = UDim2.new(1, -24, 0, 240)
+creditsTabContent.Position = UDim2.new(0, 12, 0, 95)
+creditsTabContent.BackgroundTransparency = 1
+creditsTabContent.Visible = false
+creditsTabContent.ZIndex = 5
+creditsTabContent.Parent = keyFrame
+
+local creditsLabel = Instance.new("TextLabel")
+creditsLabel.Size = UDim2.new(1, 0, 1, 0)
+creditsLabel.BackgroundTransparency = 1
+creditsLabel.Text = "Created by VVSAINTZ DEV\n\nExplorer & Property Hub\nAnti-Cheat Bypass Core Enabled"
+creditsLabel.TextColor3 = COLOR_SUBTEXT
+creditsLabel.Font = Enum.Font.GothamMedium
+creditsLabel.TextSize = 14
+creditsLabel.ZIndex = 5
+creditsLabel.Parent = creditsTabContent
+
+local keyTextBox = Instance.new("TextBox")
+keyTextBox.Size = UDim2.new(1, 0, 0, 38)
+keyTextBox.Position = UDim2.new(0, 0, 0, 5)
+keyTextBox.BackgroundColor3 = COLOR_CARD
+keyTextBox.PlaceholderText = "Enter Key Here..."
+keyTextBox.PlaceholderColor3 = COLOR_SUBTEXT
+keyTextBox.Text = ""
+keyTextBox.TextColor3 = COLOR_TEXT
+keyTextBox.Font = Enum.Font.Gotham
+keyTextBox.TextSize = 13
+keyTextBox.ZIndex = 6
+keyTextBox.Parent = mainTabContent
+applyCorner(keyTextBox, 6)
+applyStroke(keyTextBox, COLOR_BORDER, 1)
+
+local getKeyBtn = Instance.new("TextButton")
+getKeyBtn.Size = UDim2.new(1, 0, 0, 36)
+getKeyBtn.Position = UDim2.new(0, 0, 0, 50)
+getKeyBtn.BackgroundColor3 = COLOR_CARD
+getKeyBtn.Text = "Get Key (Copy Discord Link)"
+getKeyBtn.TextColor3 = COLOR_SUBTEXT
+getKeyBtn.Font = Enum.Font.GothamBold
+getKeyBtn.TextSize = 12
+getKeyBtn.ZIndex = 6
+getKeyBtn.Parent = mainTabContent
+applyCorner(getKeyBtn, 6)
+applyStroke(getKeyBtn, COLOR_BORDER, 1)
+
+local fallbackLabel = Instance.new("TextLabel")
+fallbackLabel.Size = UDim2.new(1, 0, 0, 30)
+fallbackLabel.Position = UDim2.new(0, 0, 0, 90)
+fallbackLabel.BackgroundTransparency = 1
+fallbackLabel.Text = "Link: https://discord.gg/Dd5gXEAWTP"
+fallbackLabel.TextColor3 = COLOR_SUBTEXT
+fallbackLabel.Font = Enum.Font.Gotham
+fallbackLabel.TextSize = 10
+fallbackLabel.TextWrapped = true
+fallbackLabel.ZIndex = 5
+fallbackLabel.Parent = mainTabContent
+
+local executeKeyBtn = Instance.new("TextButton")
+executeKeyBtn.Size = UDim2.new(1, 0, 0, 40)
+executeKeyBtn.Position = UDim2.new(0, 0, 0, 128)
+executeKeyBtn.BackgroundColor3 = COLOR_ACCENT
+executeKeyBtn.Text = "UNLOCK HUB"
+executeKeyBtn.TextColor3 = COLOR_TEXT
+executeKeyBtn.Font = Enum.Font.GothamBold
+executeKeyBtn.TextSize = 13
+executeKeyBtn.ZIndex = 6
+executeKeyBtn.Parent = mainTabContent
+applyCorner(executeKeyBtn, 6)
+
+local statusMsg = Instance.new("TextLabel")
+statusMsg.Size = UDim2.new(1, 0, 0, 25)
+statusMsg.Position = UDim2.new(0, 0, 0, 175)
+statusMsg.BackgroundTransparency = 1
+statusMsg.Text = ""
+statusMsg.TextColor3 = COLOR_ACCENT
+statusMsg.Font = Enum.Font.Gotham
+statusMsg.TextSize = 12
+statusMsg.ZIndex = 5
+statusMsg.Parent = mainTabContent
+
+mainTabBtn.MouseButton1Click:Connect(function()
+	mainTabContent.Visible = true
+	creditsTabContent.Visible = false
+	tweenColor(mainTabBtn, "BackgroundColor3", COLOR_ACCENT, 0.15)
+	mainTabBtn.TextColor3 = COLOR_TEXT
+	tweenColor(creditsTabBtn, "BackgroundColor3", COLOR_CARD, 0.15)
+	creditsTabBtn.TextColor3 = COLOR_SUBTEXT
+end)
+
+creditsTabBtn.MouseButton1Click:Connect(function()
+	mainTabContent.Visible = false
+	creditsTabContent.Visible = true
+	tweenColor(creditsTabBtn, "BackgroundColor3", COLOR_ACCENT, 0.15)
+	creditsTabBtn.TextColor3 = COLOR_TEXT
+	tweenColor(mainTabBtn, "BackgroundColor3", COLOR_CARD, 0.15)
+	mainTabBtn.TextColor3 = COLOR_SUBTEXT
+end)
+
+getKeyBtn.MouseButton1Click:Connect(function()
+	local link = "https://discord.gg/Dd5gXEAWTP"
+	local copyFunc = setclipboard or (toclipboard and toclipboard) or (Clipboard and Clipboard.set)
+	if copyFunc then
+		copyFunc(link)
+		statusMsg.TextColor3 = COLOR_GREEN
+		statusMsg.Text = "Link copied to clipboard!"
+	else
+		statusMsg.TextColor3 = COLOR_ACCENT
+		statusMsg.Text = "Clipboard not supported by executor."
+	end
+	task.delay(2.5, function() statusMsg.Text = "" end)
+end)
+
+-- Explorer Hub Window
+local explorerHubFrame = Instance.new("Frame")
+explorerHubFrame.Name = "ExplorerHubMain"
+explorerHubFrame.Size = UDim2.new(0, 720, 0, 520)
+explorerHubFrame.Position = UDim2.new(0.5, -360, 0.5, -260)
+explorerHubFrame.BackgroundColor3 = COLOR_BG
+explorerHubFrame.Visible = false
+explorerHubFrame.ZIndex = 5
+explorerHubFrame.Parent = screenGui
+applyCorner(explorerHubFrame, 10)
+applyStroke(explorerHubFrame, COLOR_BORDER, 1.5)
+makeDraggable(explorerHubFrame)
+
+local hubHeader = Instance.new("Frame")
+hubHeader.Size = UDim2.new(1, 0, 0, 45)
+hubHeader.BackgroundColor3 = COLOR_CARD
+hubHeader.ZIndex = 5
+hubHeader.Parent = explorerHubFrame
+applyCorner(hubHeader, 10)
+
+local hubTitle = Instance.new("TextLabel")
+hubTitle.Size = UDim2.new(1, -110, 1, 0)
+hubTitle.Position = UDim2.new(0, 15, 0, 0)
+hubTitle.BackgroundTransparency = 1
+hubTitle.Text = "⚡ VVS EXPLORER & PROPERTIES"
+hubTitle.TextColor3 = COLOR_TEXT
+hubTitle.Font = Enum.Font.GothamBold
+hubTitle.TextSize = 13
+hubTitle.TextXAlignment = Enum.TextXAlignment.Left
+hubTitle.ZIndex = 5
+hubTitle.Parent = hubHeader
+
+-- Destroy UI Button
+local topCornerDestroy = Instance.new("TextButton")
+topCornerDestroy.Size = UDim2.new(0, 26, 0, 26)
+topCornerDestroy.Position = UDim2.new(1, -94, 0.5, -13)
+topCornerDestroy.BackgroundColor3 = COLOR_ACCENT
+topCornerDestroy.Text = "🔌"
+topCornerDestroy.TextColor3 = COLOR_TEXT
+topCornerDestroy.Font = Enum.Font.GothamBold
+topCornerDestroy.TextSize = 11
+topCornerDestroy.ZIndex = 6
+topCornerDestroy.Parent = hubHeader
+applyCorner(topCornerDestroy, 6)
+
+topCornerDestroy.MouseButton1Click:Connect(function()
+	pcall(function()
+		screenGui:Destroy()
+		toggleGui:Destroy()
+	end)
+end)
+
+-- Trash / Clear Cache Button
+local topCornerClear = Instance.new("TextButton")
+topCornerClear.Size = UDim2.new(0, 26, 0, 26)
+topCornerClear.Position = UDim2.new(1, -64, 0.5, -13)
+topCornerClear.BackgroundColor3 = COLOR_CARD
+topCornerClear.Text = "🗑️"
+topCornerClear.TextColor3 = COLOR_TEXT
+topCornerClear.Font = Enum.Font.GothamBold
+topCornerClear.TextSize = 11
+topCornerClear.ZIndex = 6
+topCornerClear.Parent = hubHeader
+applyCorner(topCornerClear, 6)
+
+topCornerClear.MouseButton1Click:Connect(function()
+	pcall(function()
+		screenGui:Destroy()
+		toggleGui:Destroy()
+	end)
+end)
+
+local topCornerClose = Instance.new("TextButton")
+topCornerClose.Size = UDim2.new(0, 26, 0, 26)
+topCornerClose.Position = UDim2.new(1, -34, 0.5, -13)
+topCornerClose.BackgroundColor3 = COLOR_BG
+topCornerClose.Text = "✕"
+topCornerClose.TextColor3 = COLOR_SUBTEXT
+topCornerClose.Font = Enum.Font.GothamBold
+topCornerClose.TextSize = 12
+topCornerClose.ZIndex = 6
+topCornerClose.Parent = hubHeader
+applyCorner(topCornerClose, 6)
+
+topCornerClose.MouseButton1Click:Connect(function()
+	explorerHubFrame.Visible = false
+end)
+
+-- Side Toggle Button Logic
+openButton.MouseButton1Click:Connect(function()
+	if explorerHubFrame.Visible then
+		explorerHubFrame.Visible = false
+	elseif keyFrame.Visible then
+		keyFrame.Visible = false
+	else
+		if explorerHubFrame:GetAttribute("Unlocked") == true then
+			explorerHubFrame.Visible = true
+		else
+			keyFrame.Visible = true
+		end
+	end
+end)
+
+-- Main Content Layout
+local mainContentArea = Instance.new("Frame")
+mainContentArea.Size = UDim2.new(1, -16, 1, -58)
+mainContentArea.Position = UDim2.new(0, 8, 0, 50)
+mainContentArea.BackgroundTransparency = 1
+mainContentArea.ZIndex = 5
+mainContentArea.Parent = explorerHubFrame
+
+local treeScroll = Instance.new("ScrollingFrame")
+treeScroll.Size = UDim2.new(0.40, -4, 1, 0)
+treeScroll.BackgroundColor3 = COLOR_CARD
+treeScroll.BorderSizePixel = 0
+treeScroll.ScrollBarThickness = 3
+treeScroll.ScrollBarImageColor3 = COLOR_BORDER
+treeScroll.ZIndex = 5
+treeScroll.Parent = mainContentArea
+applyCorner(treeScroll, 6)
+applyStroke(treeScroll, COLOR_BORDER, 1)
+
+local treeListLayout = Instance.new("UIListLayout")
+treeListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+treeListLayout.Padding = UDim.new(0, 2)
+treeListLayout.Parent = treeScroll
+
+-- Right Side Container
+local rightContainer = Instance.new("Frame")
+rightContainer.Size = UDim2.new(0.60, -4, 1, 0)
+rightContainer.Position = UDim2.new(0.40, 4, 0, 0)
+rightContainer.BackgroundTransparency = 1
+rightContainer.ZIndex = 5
+rightContainer.Parent = mainContentArea
+
+-- Mode Tabs for Right Panel (Source / Properties)
+local rightTabHolder = Instance.new("Frame")
+rightTabHolder.Size = UDim2.new(1, 0, 0, 26)
+rightTabHolder.BackgroundTransparency = 1
+rightTabHolder.ZIndex = 5
+rightTabHolder.Parent = rightContainer
+
+local sourceTabBtn = Instance.new("TextButton")
+sourceTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+sourceTabBtn.BackgroundColor3 = COLOR_ACCENT
+sourceTabBtn.Text = "SOURCE / CODE"
+sourceTabBtn.TextColor3 = COLOR_TEXT
+sourceTabBtn.Font = Enum.Font.GothamBold
+sourceTabBtn.TextSize = 10
+sourceTabBtn.ZIndex = 6
+sourceTabBtn.Parent = rightTabHolder
+applyCorner(sourceTabBtn, 6)
+
+local propTabBtn = Instance.new("TextButton")
+propTabBtn.Size = UDim2.new(0.48, 0, 1, 0)
+propTabBtn.Position = UDim2.new(0.52, 0, 0, 0)
+propTabBtn.BackgroundColor3 = COLOR_CARD
+propTabBtn.Text = "PROPERTIES"
+propTabBtn.TextColor3 = COLOR_SUBTEXT
+propTabBtn.Font = Enum.Font.GothamBold
+propTabBtn.TextSize = 10
+propTabBtn.ZIndex = 6
+propTabBtn.Parent = rightTabHolder
+applyCorner(propTabBtn, 6)
+
+-- Scrollable Viewer Container
+local viewerScroll = Instance.new("ScrollingFrame")
+viewerScroll.Size = UDim2.new(1, 0, 1, -32)
+viewerScroll.Position = UDim2.new(0, 0, 0, 32)
+viewerScroll.BackgroundColor3 = COLOR_CARD
+viewerScroll.BorderSizePixel = 0
+viewerScroll.ScrollBarThickness = 6
+viewerScroll.ScrollBarImageColor3 = COLOR_BORDER
+viewerScroll.ZIndex = 6
+viewerScroll.Parent = rightContainer
+applyCorner(viewerScroll, 6)
+applyStroke(viewerScroll, COLOR_BORDER, 1)
+
+-- Viewer Box (Fully scrollable & automatically sizes height based on text content)
+local viewerBox = Instance.new("TextBox")
+viewerBox.Size = UDim2.new(1, 0, 0, 0)
+viewerBox.Position = UDim2.new(0, 0, 0, 0)
+viewerBox.BackgroundTransparency = 1
+viewerBox.MultiLine = true
+viewerBox.ClearTextOnFocus = false
+viewerBox.TextEditable = true
+viewerBox.AutomaticSize = Enum.AutomaticSize.Y
+viewerBox.Text = "-- Click an item on the left to view source or properties --"
+viewerBox.TextColor3 = COLOR_TEXT
+viewerBox.Font = Enum.Font.Code
+viewerBox.TextSize = 11
+viewerBox.TextXAlignment = Enum.TextXAlignment.Left
+viewerBox.TextYAlignment = Enum.TextYAlignment.Top
+viewerBox.ZIndex = 7
+viewerBox.Parent = viewerScroll
+
+-- Automatically update scrolling bounds whenever the text changes
+viewerBox:GetPropertyChangedSignal("TextBounds"):Connect(function()
+	viewerScroll.CanvasSize = UDim2.new(0, 0, 0, viewerBox.TextBounds.Y + 20)
+end)
+
+-- Properties Scroll Box
+local propScroll = Instance.new("ScrollingFrame")
+propScroll.Size = UDim2.new(1, 0, 1, -32)
+propScroll.Position = UDim2.new(0, 0, 0, 32)
+propScroll.BackgroundColor3 = COLOR_CARD
+propScroll.Visible = false
+propScroll.ScrollBarThickness = 6
+propScroll.ScrollBarImageColor3 = COLOR_BORDER
+propScroll.ZIndex = 6
+propScroll.Parent = rightContainer
+applyCorner(propScroll, 6)
+applyStroke(propScroll, COLOR_BORDER, 1)
+
+local propListLayout = Instance.new("UIListLayout")
+propListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+propListLayout.Padding = UDim.new(0, 2)
+propListLayout.Parent = propScroll
+
+local activeSelectedInstance = nil
+
+local function showProperties(inst)
+	activeSelectedInstance = inst
+	for _, child in ipairs(propScroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+	
+	if not inst then return end
+	
+	local commonProps = {"Name", "ClassName", "Parent"}
+	if inst:IsA("BasePart") then
+		table.insert(commonProps, "Position")
+		table.insert(commonProps, "Size")
+		table.insert(commonProps, "BrickColor")
+		table.insert(commonProps, "Transparency")
+		table.insert(commonProps, "Anchored")
+		table.insert(commonProps, "CanCollide")
+	elseif inst:IsA("Model") then
+		table.insert(commonProps, "WorldPivot")
+	elseif inst:IsA("GuiObject") then
+		table.insert(commonProps, "Size")
+		table.insert(commonProps, "Position")
+		table.insert(commonProps, "BackgroundColor3")
+		table.insert(commonProps, "Visible")
+	end
+	
+	for _, propName in ipairs(commonProps) do
+		local success, val = pcall(function() return inst[propName] end)
+		if success then
+			local row = Instance.new("Frame")
+			row.Size = UDim2.new(1, -4, 0, 28)
+			row.BackgroundTransparency = 1
+			row.ZIndex = 7
+			row.Parent = propScroll
+			
+			local label = Instance.new("TextLabel")
+			label.Size = UDim2.new(0.4, 0, 1, 0)
+			label.Position = UDim2.new(0, 6, 0, 0)
+			label.BackgroundTransparency = 1
+			label.Text = propName
+			label.TextColor3 = COLOR_SUBTEXT
+			label.Font = Enum.Font.GothamBold
+			label.TextSize = 11
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.ZIndex = 7
+			label.Parent = row
+			
+			local valBox = Instance.new("TextBox")
+			valBox.Size = UDim2.new(0.58, 0, 0, 24)
+			valBox.Position = UDim2.new(0.4, 0, 0.5, -12)
+			valBox.BackgroundColor3 = COLOR_BG
+			valBox.Text = tostring(val)
+			valBox.TextColor3 = COLOR_TEXT
+			valBox.Font = Enum.Font.Gotham
+			valBox.TextSize = 11
+			valBox.ZIndex = 8
+			valBox.Parent = row
+			applyCorner(valBox, 4)
+			applyStroke(valBox, COLOR_BORDER, 1)
+			
+			valBox.FocusLost:Connect(function()
+				pcall(function()
+					local newVal = valBox.Text
+					if val == true or val == false then
+						newVal = (newVal:lower() == "true")
+					elseif tonumber(newVal) then
+						newVal = tonumber(newVal)
+					end
+					inst[propName] = newVal
+				end)
+			end)
+		end
+	end
+	propScroll.CanvasSize = UDim2.new(0, 0, 0, #commonProps * 30)
+end
+
+sourceTabBtn.MouseButton1Click:Connect(function()
+	viewerScroll.Visible = true
+	propScroll.Visible = false
+	tweenColor(sourceTabBtn, "BackgroundColor3", COLOR_ACCENT, 0.15)
+	sourceTabBtn.TextColor3 = COLOR_TEXT
+	tweenColor(propTabBtn, "BackgroundColor3", COLOR_CARD, 0.15)
+	propTabBtn.TextColor3 = COLOR_SUBTEXT
+end)
+
+propTabBtn.MouseButton1Click:Connect(function()
+	viewerScroll.Visible = false
+	propScroll.Visible = true
+	tweenColor(propTabBtn, "BackgroundColor3", COLOR_ACCENT, 0.15)
+	propTabBtn.TextColor3 = COLOR_TEXT
+	tweenColor(sourceTabBtn, "BackgroundColor3", COLOR_CARD, 0.15)
+	sourceTabBtn.TextColor3 = COLOR_SUBTEXT
+	if activeSelectedInstance then showProperties(activeSelectedInstance) end
+end)
+
+local updateCanvasSize
+
+-- Recursive Tree Builder
+local function buildSubTree(parentInst, parentGuiContainer, indentLevel)
+	for _, child in ipairs(parentInst:GetChildren()) do
+		local itemRow = Instance.new("Frame")
+		itemRow.Size = UDim2.new(1, -4, 0, 26)
+		itemRow.BackgroundTransparency = 1
+		itemRow.ZIndex = 6
+		itemRow.Parent = parentGuiContainer
+		
+		local hasChildren = #child:GetChildren() > 0
+		local expandBtn = nil
+		if hasChildren then
+			expandBtn = Instance.new("TextButton")
+			expandBtn.Size = UDim2.new(0, 20, 0, 20)
+			expandBtn.Position = UDim2.new(0, indentLevel * 12, 0, 3)
+			expandBtn.BackgroundColor3 = COLOR_BG
+			expandBtn.Text = "▶"
+			expandBtn.TextColor3 = COLOR_SUBTEXT
+			expandBtn.Font = Enum.Font.GothamBold
+			expandBtn.TextSize = 9
+			expandBtn.ZIndex = 7
+			expandBtn.Parent = itemRow
+			applyCorner(expandBtn, 4)
+		end
+		
+		local selectBtn = Instance.new("TextButton")
+		selectBtn.Size = UDim2.new(1, - (indentLevel * 12) - (hasChildren and 24 or 0), 0, 24)
+		selectBtn.Position = UDim2.new(0, (indentLevel * 12) + (hasChildren and 24 or 0), 0, 1)
+		selectBtn.BackgroundColor3 = COLOR_BG
+		selectBtn.Text = " " .. child.Name .. " (" .. child.ClassName .. ")"
+		selectBtn.TextColor3 = COLOR_TEXT
+		selectBtn.Font = Enum.Font.Gotham
+		selectBtn.TextSize = 11
+		selectBtn.TextXAlignment = Enum.TextXAlignment.Left
+		selectBtn.ZIndex = 7
+		selectBtn.Parent = itemRow
+		applyCorner(selectBtn, 4)
+		
+		selectBtn.MouseButton1Click:Connect(function()
+			activeSelectedInstance = child
+			showProperties(child)
+			
+			if child.Name == "ServerScriptService" or child.Name == "ServerStorage" then
+				viewerBox.Text = "-- unable to see scripts here cant bypass sorryy --"
+			elseif child:IsA("LuaSourceContainer") then
+				local success, src = pcall(function()
+					return getscriptsource and getscriptsource(child) or child.Source
+				end)
+				if success and src then
+					viewerBox.Text = src
+				else
+					viewerBox.Text = "-- unable to see scripts here cant bypass sorryy --"
+				end
+			else
+				viewerBox.Text = "--- Children Summary ---\n"
+				for _, c in ipairs(child:GetChildren()) do
+					viewerBox.Text = viewerBox.Text .. "• " .. c.Name .. " (" .. c.ClassName .. ")\n"
+				end
+			end
+		end)
+		
+		if hasChildren then
+			local childContainer = Instance.new("Frame")
+			childContainer.Name = "ChildContainer"
+			childContainer.Size = UDim2.new(1, 0, 0, 0)
+			childContainer.BackgroundTransparency = 1
+			childContainer.Visible = false
+			childContainer.AutomaticSize = Enum.AutomaticSize.Y
+			childContainer.ZIndex = 6
+			childContainer.Parent = parentGuiContainer
+			
+			local subLayout = Instance.new("UIListLayout")
+			subLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			subLayout.Padding = UDim.new(0, 2)
+			subLayout.Parent = childContainer
+			
+			local isExpanded = false
+			expandBtn.MouseButton1Click:Connect(function()
+				isExpanded = not isExpanded
+				childContainer.Visible = isExpanded
+				expandBtn.Text = isExpanded and "▼" or "▶"
+				if isExpanded and #childContainer:GetChildren() <= 1 then
+					buildSubTree(child, childContainer, indentLevel + 1)
+				end
+				updateCanvasSize()
+			end)
+		end
+	end
+	updateCanvasSize()
+end
+
+updateCanvasSize = function()
+	local function calculateHeight(container)
+		local h = 0
+		for _, item in ipairs(container:GetChildren()) do
+			if item:IsA("Frame") then
+				h = h + 28
+				local childCont = item:FindFirstChild("ChildContainer")
+				if childCont and childCont.Visible then
+					h = h + calculateHeight(childCont)
+				end
+			end
+		end
+		return h
+	end
+	treeScroll.CanvasSize = UDim2.new(0, 0, 0, calculateHeight(treeScroll) + 40)
+end
+
+-- Populate Top-Level Services
+local topServices = {
+	game:GetService("Workspace"),
+	game:GetService("Players"),
+	game:GetService("Lighting"),
+	game:GetService("ReplicatedStorage"),
+	game:GetService("ServerScriptService"),
+	game:GetService("ServerStorage"),
+	game:GetService("StarterGui"),
+	game:GetService("StarterPack"),
+	game:GetService("StarterPlayer"),
+	game:GetService("Teams"),
+	game:GetService("SoundService"),
+	game:GetService("TextChatService"),
+	game:GetService("VoiceChatService")
+}
+
+for _, svc in ipairs(topServices) do
+	if svc then
+		local itemRow = Instance.new("Frame")
+		itemRow.Size = UDim2.new(1, -4, 0, 26)
+		itemRow.BackgroundTransparency = 1
+		itemRow.ZIndex = 6
+		itemRow.Parent = treeScroll
+		
+		local expandBtn = Instance.new("TextButton")
+		expandBtn.Size = UDim2.new(0, 20, 0, 20)
+		expandBtn.Position = UDim2.new(0, 4, 0, 3)
+		expandBtn.BackgroundColor3 = COLOR_BG
+		expandBtn.Text = "▶"
+		expandBtn.TextColor3 = COLOR_SUBTEXT
+		expandBtn.Font = Enum.Font.GothamBold
+		expandBtn.TextSize = 9
+		expandBtn.ZIndex = 7
+		expandBtn.Parent = itemRow
+		applyCorner(expandBtn, 4)
+		
+		local selectBtn = Instance.new("TextButton")
+		selectBtn.Size = UDim2.new(1, -28, 0, 24)
+		selectBtn.Position = UDim2.new(0, 28, 0, 1)
+		selectBtn.BackgroundColor3 = COLOR_BG
+		selectBtn.Text = " " .. svc.Name .. " (" .. svc.ClassName .. ")"
+		selectBtn.TextColor3 = COLOR_TEXT
+		selectBtn.Font = Enum.Font.GothamBold
+		selectBtn.TextSize = 11
+		selectBtn.TextXAlignment = Enum.TextXAlignment.Left
+		selectBtn.ZIndex = 7
+		selectBtn.Parent = itemRow
+		applyCorner(selectBtn, 4)
+		
+		selectBtn.MouseButton1Click:Connect(function()
+			activeSelectedInstance = svc
+			showProperties(svc)
+			
+			if svc.Name == "ServerScriptService" or svc.Name == "ServerStorage" then
+				viewerBox.Text = "-- unable to see scripts here cant bypass sorryy --"
+			else
+				viewerBox.Text = "Service: " .. svc.Name .. "\n\n--- Children ---\n"
+				for _, c in ipairs(svc:GetChildren()) do
+					viewerBox.Text = viewerBox.Text .. "• " .. c.Name .. " (" .. c.ClassName .. ")\n"
+				end
+			end
+		end)
+		
+		local childContainer = Instance.new("Frame")
+		childContainer.Name = "ChildContainer"
+		childContainer.Size = UDim2.new(1, 0, 0, 0)
+		childContainer.BackgroundTransparency = 1
+		childContainer.Visible = false
+		childContainer.AutomaticSize = Enum.AutomaticSize.Y
+		childContainer.ZIndex = 6
+		childContainer.Parent = treeScroll
+		
+		local subLayout = Instance.new("UIListLayout")
+		subLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		subLayout.Padding = UDim.new(0, 2)
+		subLayout.Parent = childContainer
+		
+		local isExpanded = false
+		expandBtn.MouseButton1Click:Connect(function()
+			isExpanded = not isExpanded
+			childContainer.Visible = isExpanded
+			expandBtn.Text = isExpanded and "▼" or "▶"
+			if isExpanded and #childContainer:GetChildren() <= 1 then
+				buildSubTree(svc, childContainer, 1)
+			end
+			updateCanvasSize()
+		end)
+	end
+end
+updateCanvasSize()
+
+-- Key Validation Logic
+local isEvaluatingKey = false
+local function validateAndUnlock()
+	if isEvaluatingKey then return end
+	if keyTextBox.Text == "VVSAINTZONTOP" then
+		statusMsg.TextColor3 = COLOR_GREEN
+		statusMsg.Text = "ACCESS GRANTED!"
+		task.wait(0.4)
+		keyFrame.Visible = false
+		explorerHubFrame.Visible = true
+		explorerHubFrame:SetAttribute("Unlocked", true)
+	else
+		isEvaluatingKey = true
+		keyTextBox.Text = ""
+		keyTextBox.PlaceholderText = "WRONG KEY!"
+		statusMsg.Text = "Incorrect Key!"
+		task.delay(1.5, function()
+			keyTextBox.PlaceholderText = "Enter Key Here..."
+			statusMsg.Text = ""
+			isEvaluatingKey = false
+		end)
+	end
+end
+
+executeKeyBtn.MouseButton1Click:Connect(validateAndUnlock)
+keyTextBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		validateAndUnlock()
+	end
+end)
